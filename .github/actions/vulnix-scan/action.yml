@@ -1,0 +1,22 @@
+name: Vulnix Scan
+
+inputs:
+  hosts:
+    required: true
+  output-dir:
+    required: true
+  whitelist:
+    required: false
+    default: ""
+
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      env:
+        VULNIX_HOSTS: ${{ inputs.hosts }}
+        VULNIX_OUTPUT_DIR: ${{ inputs.output-dir }}
+        VULNIX_WHITELIST: ${{ inputs.whitelist }}
+      run: |
+        mkdir -p "$VULNIX_OUTPUT_DIR"
+        ./scripts/vulnix-scan.sh > "$VULNIX_OUTPUT_DIR/scan.log" 2>&1 || true

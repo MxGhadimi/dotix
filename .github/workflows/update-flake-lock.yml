@@ -1,0 +1,435 @@
+name: Flake Update
+
+on:
+  schedule:
+    - cron: "0 7 * * 1" # an hour after the vulnix scan so they don't compete for runners
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: read
+  pull-requests: write
+
+concurrency:
+  group: flake-update
+  cancel-in-progress: false
+
+jobs:
+  update:
+    name: Update Flake Inputs
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    outputs:
+      updated: ${{ steps.check.outputs.updated }}
+      pr_number: ${{ steps.update.outputs.pull-request-number }}
+      commit_sha: ${{ steps.sha.outputs.commit_sha }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          token: ${{ secrets.GH_TOKEN_FOR_UPDATES }}
+
+      - uses: ./.github/actions/setup-nix
+        with:
+          ssh-private-key: ${{ secrets.NIX_SECRETS_SSH_KEY }}
+          cachix-name: mxghadimi
+          cachix-auth-token: ${{ secrets.CACHIX_AUTH_TOKEN }}
+
+      - name: Update flake.lock
+        id: update
+        uses: DeterminateSystems/update-flake-lock@main
+        with:
+          token: ${{ secrets.GH_TOKEN_FOR_UPDATES }}
+          branch: feat/flake_lock_update
+          pr-title: "flake: update inputs"
+          pr-body: "{{ env.GIT_COMMIT_MESSAGE }}"
+          pr-labels: |
+            dependencies
+            automated
+          pr-assignees: MxGhadimi
+
+      - name: Check PR was created
+        id: check
+        run: |
+          if [[ -n "${{ steps.update.outputs.pull-request-number }}" ]]; then
+            echo "updated=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "updated=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Get PR head SHA
+        id: sha
+        if: steps.check.outputs.updated == 'true'
+        uses: actions/github-script@v7
+        env:
+          PR_NUMBER: ${{ steps.update.outputs.pull-request-number }}
+        with:
+          script: |
+            const [owner, repo] = process.env.GITHUB_REPOSITORY.split('/');
+            const pr = await github.rest.pulls.get({
+              owner, repo, pull_number: parseInt(process.env.PR_NUMBER, 10),
+            });
+            core.setOutput('commit_sha', pr.data.head.sha);
+            console.log(`PR head SHA: ${pr.data.head.sha}`);
+
+  # scan main (baseline) and the PR branch (candidate), then comment only the CVEs this update adds or fixes
+  vuln-delta:
+    name: Vulnerability Delta
+    needs: [update]
+    if: needs.update.outputs.updated == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      VULNIX_BUILD: "0"
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: feat/flake_lock_update
+          fetch-depth: 0
+          token: ${{ secrets.GH_TOKEN_FOR_UPDATES }}
+      - uses: ./.github/actions/cleanup
+      - uses: ./.github/actions/setup-nix
+        with:
+          ssh-private-key: ${{ secrets.NIX_SECRETS_SSH_KEY }}
+          cachix-name: mxghadimi
+          cachix-auth-token: ${{ secrets.CACHIX_AUTH_TOKEN }}
+
+      - name: Determine hosts
+        id: hosts
+        uses: ./.github/actions/get-hosts
+
+      - name: Scan candidate (PR lockfile)
+        uses: ./.github/actions/vulnix-scan
+        with:
+          hosts: ${{ steps.hosts.outputs.csv }}
+          output-dir: /tmp/vulnix-cand
+
+      - name: Swap in main's lockfile
+        run: |
+          git fetch --quiet origin main
+          git show origin/main:flake.lock > flake.lock
+
+      - name: Scan baseline (main lockfile)
+        uses: ./.github/actions/vulnix-scan
+        with:
+          hosts: ${{ steps.hosts.outputs.csv }}
+          output-dir: /tmp/vulnix-base
+
+      - name: Restore PR lockfile
+        run: git checkout -- flake.lock
+
+      - name: Compute security delta
+        run: |
+          bash ./scripts/vulnix-delta.sh /tmp/vulnix-base /tmp/vulnix-cand \
+            ${{ steps.hosts.outputs.space }} > /tmp/delta.json
+
+      - name: Post delta comment on PR
+        uses: actions/github-script@v7
+        env:
+          PR_NUMBER: ${{ needs.update.outputs.pr_number }}
+        with:
+          script: |
+            const fs = require('fs');
+            const [owner, repo] = process.env.GITHUB_REPOSITORY.split('/');
+            const prNumber = parseInt(process.env.PR_NUMBER, 10);
+            if (!prNumber) {
+              console.log('No PR number, skipping');
+              return;
+            }
+
+            const delta = JSON.parse(fs.readFileSync('/tmp/delta.json', 'utf8'));
+            const introduced = delta.introduced || [];
+            const resolved = delta.resolved || [];
+
+            const MARKER = '<!-- vulnix-delta -->';
+            const sevIcon = { critical: '🔴', high: '🟠', medium: '🟡', low: '🟢', unknown: '⚪' };
+
+            const row = c => {
+              const score = c.score == null ? '—' : c.score.toFixed(1);
+              return `| ${sevIcon[c.severity] || '⚪'} \`${c.cve}\` | ${score} | ${(c.packages || []).join(', ')} |`;
+            };
+            const table = cves => [
+              '| CVE | CVSS | Package(s) |',
+              '| :-- | :--: | :-- |',
+              ...cves.map(row),
+              '',
+            ];
+
+            const lines = [MARKER, '## Security impact of this update', ''];
+
+            if (introduced.length === 0 && resolved.length === 0) {
+              lines.push('No change in known CVEs from this update.');
+            } 
+            else {
+              if (introduced.length > 0) {
+                lines.push('This update **adds** the following known CVEs:', '');
+                lines.push(...table(introduced));
+              }
+              if (resolved.length > 0) {
+                lines.push('This update **fixes** the following known CVEs:', '');
+                lines.push(...table(resolved));
+              }
+            }
+            lines.push('');
+            lines.push("_Only CVEs changed by this update are shown; the system's existing vulnerabilities are intentionally omitted._");
+
+            const body = lines.join('\n');
+
+            const comments = await github.rest.issues.listComments({
+              owner, repo, issue_number: prNumber, per_page: 100,
+            });
+            const existing = comments.data.find(c => c.body?.includes(MARKER));
+
+            if (existing) {
+              await github.rest.issues.updateComment({ owner, repo, comment_id: existing.id, body });
+            } 
+            else {
+              await github.rest.issues.createComment({ owner, repo, issue_number: prNumber, body });
+            }
+
+  wait-for-ci:
+    name: Wait for CI
+    needs: [update]
+    if: needs.update.outputs.updated == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+
+    outputs:
+      ci_conclusion: ${{ steps.wait.outputs.conclusion }}
+      ci_run_id: ${{ steps.wait.outputs.run_id }}
+      ci_sha: ${{ steps.wait.outputs.ci_sha }}
+
+    steps:
+      - name: Wait for CI
+        id: wait
+        uses: actions/github-script@v7
+        env:
+          COMMIT_SHA: ${{ needs.update.outputs.commit_sha }}
+          CI_BRANCH: feat/flake_lock_update
+        with:
+          script: |
+            const [owner, repo] = process.env.GITHUB_REPOSITORY.split('/');
+            const commitSha = process.env.COMMIT_SHA;
+            const branch = process.env.CI_BRANCH;
+
+            if (!commitSha) {
+              core.setFailed('COMMIT_SHA is empty');
+              return;
+            }
+
+            const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+            const workflows = await github.rest.actions.listRepoWorkflows({ owner, repo, per_page: 100 });
+            const ci = workflows.data.workflows.find(wf => wf.name === 'CI');
+            if (!ci) {
+              core.setFailed('Could not find a workflow named "CI".');
+              return;
+            }
+
+            const searchStart = new Date();
+            let run = null;
+
+            for (let attempt = 1; attempt <= 60 && !run; attempt++) {
+              await sleep(15000);
+
+              const exact = await github.rest.actions.listWorkflowRuns({
+                owner, repo, workflow_id: ci.id, head_sha: commitSha, per_page: 1,
+              });
+              if (exact.data.workflow_runs.length > 0) {
+                const r = exact.data.workflow_runs[0];
+                if (r.status === 'completed' && r.conclusion === 'cancelled') {
+                } 
+                else if (r.status === 'completed') {
+                  run = r;
+                  break;
+                } 
+                else {
+                  continue;
+                }
+              }
+
+              const recent = await github.rest.actions.listWorkflowRuns({
+                owner, repo, workflow_id: ci.id, branch, per_page: 5,
+              });
+
+              const candidate = recent.data.workflow_runs[0];
+              if (!candidate) continue;
+
+              if (candidate.head_sha === commitSha) {
+                if (candidate.status === 'completed') { run = candidate; break; }
+              } 
+              else if (new Date(candidate.created_at) >= searchStart) {
+                if (candidate.status === 'completed') {
+                  console.log(`Accepting superseding run #${candidate.id}`);
+                  run = candidate;
+                  break;
+                }
+              }
+            }
+
+            if (!run) {
+              core.setFailed(`No CI run found for ${commitSha.substring(0, 7)} after 15 minutes`);
+              return;
+            }
+
+            for (let attempt = 1; attempt <= 120 && run.status !== 'completed'; attempt++) {
+              await sleep(15000);
+              run = (await github.rest.actions.getWorkflowRun({ owner, repo, run_id: run.id })).data;
+              console.log(`Poll ${attempt}: status=${run.status} conclusion=${run.conclusion}`);
+            }
+
+            if (run.status !== 'completed') {
+              core.setFailed(`CI run #${run.id} did not complete in time`);
+              return;
+            }
+
+            core.setOutput('conclusion', run.conclusion);
+            core.setOutput('run_id', String(run.id));
+            core.setOutput('ci_sha', run.head_sha);
+
+  notify:
+    name: Notify
+    needs: [update, wait-for-ci]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Send notification
+        uses: actions/github-script@v7
+        env:
+          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
+          UPDATED: ${{ needs.update.outputs.updated }}
+          COMMIT_SHA: ${{ needs.update.outputs.commit_sha }}
+          PR_NUMBER: ${{ needs.update.outputs.pr_number }}
+          CI_CONCLUSION: ${{ needs.wait-for-ci.outputs.ci_conclusion }}
+          CI_RUN_ID: ${{ needs.wait-for-ci.outputs.ci_run_id }}
+          CI_SHA: ${{ needs.wait-for-ci.outputs.ci_sha }}
+          UPDATE_RESULT: ${{ needs.update.result }}
+        with:
+          script: |
+            const webhook = process.env.DISCORD_WEBHOOK;
+            if (!webhook) {
+              console.log('No webhook set, skipping');
+              return;
+            }
+
+            const [owner, repo] = process.env.GITHUB_REPOSITORY.split('/');
+            const serverUrl = process.env.GITHUB_SERVER_URL;
+            const repoUrl = `${serverUrl}/${owner}/${repo}`;
+
+            const updated = process.env.UPDATED === 'true';
+            const commitSha = process.env.COMMIT_SHA || context.sha;
+            const ciConclusion = process.env.CI_CONCLUSION || '';
+            const ciRunId = process.env.CI_RUN_ID || '';
+            const ciSha = process.env.CI_SHA || commitSha;
+            const updateResult = process.env.UPDATE_RESULT || '';
+            const prNumber = process.env.PR_NUMBER || '';
+
+            const branch = 'feat/flake_lock_update';
+            const updateRunUrl = `${repoUrl}/actions/runs/${context.runId}`;
+            const ciRunUrl = `${repoUrl}/actions/runs/${ciRunId}`;
+            const link = (sha) => `[\`${sha.substring(0, 7)}\`](${repoUrl}/commit/${sha})`;
+
+            const commitLine = (ciSha && ciSha !== commitSha)
+              ? `**Update commit:** ${link(commitSha)}\n**CI ran on:** ${link(ciSha)}`
+              : `**Commit:** ${link(commitSha)}`;
+            const prLine = prNumber ? `**PR:** [#${prNumber}](${repoUrl}/pull/${prNumber})` : '';
+
+            let title, color, lines;
+
+            if (updateResult === 'failure') {
+              title = ':warning: Flake Update Failed';
+              color = 15548997;
+              lines = ['**Status:** update job failed', '', `[:link: View Run](${updateRunUrl})`];
+
+            } 
+            else if (!updated) {
+              title = ':white_check_mark: Flake Inputs Up to Date';
+              color = 5763719;
+              lines = [
+                '**Status:** no changes',
+                'All flake inputs are already at their latest versions.',
+                '',
+                '**Branch:** `main`',
+                `**Commit:** ${link(context.sha)}`,
+                '',
+                `[:link: View Run](${updateRunUrl})`,
+              ];
+
+            } 
+            else if (ciConclusion === 'success') {
+              title = ':white_check_mark: Flake Update + CI Passed';
+              color = 5763719;
+              lines = [
+                '**Status:** updated — ready to merge',
+                '**CI:** :heavy_check_mark: passed',
+                '',
+                `**Branch:** \`${branch}\``,
+                prLine, commitLine,
+                '',
+                `[:link: Update Run](${updateRunUrl})`,
+                `[:link: CI Run](${ciRunUrl})`,
+              ].filter(Boolean);
+
+            } 
+            else if (ciConclusion === 'failure') {
+              title = ':x: Flake Update — CI Failed';
+              color = 15548997;
+              lines = [
+                '**Status:** updated — CI failed',
+                '**CI:** :x: failed',
+                '',
+                `**Branch:** \`${branch}\``,
+                prLine, commitLine,
+                '',
+                `[:link: Update Run](${updateRunUrl})`,
+                `[:link: CI Run](${ciRunUrl})`,
+              ].filter(Boolean);
+
+            } 
+            else if (ciConclusion === 'cancelled') {
+              title = ':heavy_multiplication_x: Flake Update — CI Cancelled';
+              color = 16776960;
+              lines = [
+                '**Status:** updated — CI was cancelled',
+                '**CI:** :heavy_multiplication_x: cancelled',
+                '',
+                `**Branch:** \`${branch}\``,
+                prLine, commitLine,
+                '',
+                `[:link: Update Run](${updateRunUrl})`,
+                `[:link: CI Run](${ciRunUrl})`,
+              ].filter(Boolean);
+
+            } 
+            else {
+              title = ':warning: Flake Updated — CI Status Unknown';
+              color = 16776960;
+              lines = [
+                '**Status:** updated — CI status unknown',
+                '**CI:** :grey_question: unknown (wait timed out or CI never appeared)',
+                '',
+                `**Branch:** \`${branch}\``,
+                prLine, commitLine,
+                '',
+                `[:link: Update Run](${updateRunUrl})`,
+              ].filter(Boolean);
+            }
+
+            const payload = JSON.stringify({
+              embeds: [{
+                title,
+                description: lines.join('\n'),
+                color,
+                timestamp: new Date().toISOString(),
+                footer: { text: `${owner}/${repo}` },
+              }],
+            });
+
+            const resp = await fetch(webhook, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: payload,
+            });
+            if (!resp.ok) {
+              core.setFailed(`Discord webhook failed (${resp.status}): ${await resp.text()}`);
+            }
