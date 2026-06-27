@@ -1,12 +1,11 @@
-{...}: {
+{lib, ...}: {
   flake.nixosModules.packettracer = {
     pkgs,
-    lib,
+    config,
     ...
   }: {
-    environment.systemPackages =
-      lib.optionals (builtins.getEnv "CI" != "true") # skip  gh actions runner
-      
-      (with pkgs; [ciscoPacketTracer9]);
+    config = lib.mkIf (!config.custom.ci.buildable) {
+      environment.systemPackages = with pkgs; [ciscoPacketTracer9];
+    };
   };
 }
