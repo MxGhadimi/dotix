@@ -1,0 +1,23 @@
+name: Vulnix Scan
+
+inputs:
+  hosts:
+    required: true
+  output-dir:
+    required: true
+  whitelist:
+    required: false
+    default: ""
+
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      env:
+        VULNIX_HOSTS: ${{ inputs.hosts }}
+        VULNIX_OUTPUT_DIR: ${{ inputs.output-dir }}
+        VULNIX_WHITELIST: ${{ inputs.whitelist }}
+      run: |
+        mkdir -p "$VULNIX_OUTPUT_DIR"
+        # Print output directly to the UI so you can see any tracebacks/logs while still saving scan.log
+        ./scripts/vulnix-scan.sh 2>&1 | tee "$VULNIX_OUTPUT_DIR/scan.log" || true

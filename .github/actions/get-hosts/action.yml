@@ -1,0 +1,27 @@
+name: Get Hosts
+
+outputs:
+  json:
+    value: ${{ steps.eval.outputs.json }}
+  csv:
+    value: ${{ steps.eval.outputs.csv }}
+  space:
+    value: ${{ steps.eval.outputs.space }}
+
+runs:
+  using: composite
+  steps:
+    - id: eval
+      shell: bash
+      run: |
+        hosts=$(nix eval .#nixosConfigurations --apply '
+          configs:
+            builtins.filter
+              (h: configs.${h}.config.custom.ci.buildable)
+              (builtins.attrNames configs)
+        ' --json)
+        {
+          echo "json=$hosts"
+          echo "csv=$(jq -r 'join(",")' <<<"$hosts")"
+          echo "space=$(jq -r 'join(" ")' <<<"$hosts")"
+        } >> "$GITHUB_OUTPUT"

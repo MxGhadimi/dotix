@@ -1,0 +1,203 @@
+name: Vulnerability Scan
+
+
+on:
+  schedule:
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: vulnix
+  cancel-in-progress: true
+
+jobs:
+  parse-flake:
+    name: Parse Flake
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      hosts: ${{ steps.hosts.outputs.json }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup-nix
+        with:
+          ssh-private-key: ${{ secrets.NIX_SECRETS_SSH_KEY }}
+          cachix-name: mxghadimi
+          cachix-auth-token: ${{ secrets.CACHIX_AUTH_TOKEN }}
+
+      - name: Get CI-buildable hosts
+        id: hosts
+        uses: ./.github/actions/get-hosts
+
+  vulnix:
+    name: Scan all hosts
+    needs: [parse-flake]
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      VULNIX_OUTPUT_DIR: /tmp/vulnix-reports/${{ github.run_id }}
+      VULNIX_BUILD: "1"
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/cleanup
+      - uses: ./.github/actions/setup-nix
+        with:
+          ssh-private-key: ${{ secrets.NIX_SECRETS_SSH_KEY }}
+          cachix-name: mxghadimi
+          cachix-auth-token: ${{ secrets.CACHIX_AUTH_TOKEN }}
+
+      - name: Run vulnix scan
+        uses: ./.github/actions/vulnix-scan
+        with:
+          hosts: ${{ join(fromJSON(needs.parse-flake.outputs.hosts), ',') }}
+          output-dir: ${{ env.VULNIX_OUTPUT_DIR }}
+
+      - name: Notify Discord
+        if: always()
+        uses: actions/github-script@v9
+        env:
+          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
+          HOSTS_JSON: ${{ needs.parse-flake.outputs.hosts }}
+        with:
+          script: |
+            const fs = require('fs');
+            const path = require('path');
+
+            const webhook = process.env.DISCORD_WEBHOOK;
+            if (!webhook) {
+              console.log('No webhook set, skipping');
+              return;
+            }
+
+            const dir = process.env.VULNIX_OUTPUT_DIR;
+            const hosts = JSON.parse(process.env.HOSTS_JSON || '[]');
+
+            let results = [];
+            try {
+              const data = JSON.parse(fs.readFileSync(path.join(dir, 'summary.json'), 'utf8'));
+              results = data.hosts || [];
+            } catch {
+              results = [];
+            }
+            if (results.length === 0) {
+              results = hosts.map(h => ({
+                host: h, status: 'error',
+                total_findings: 0, critical: 0, high: 0, medium: 0, low: 0,
+              }));
+            }
+
+            const sum = key => results.reduce((acc, r) => acc + (r[key] || 0), 0);
+            const totalVulns = sum('total_findings');
+            const totalCritical = sum('critical');
+            const hasErrors = results.some(r => r.status === 'error');
+
+            let title, color;
+            if (hasErrors) {
+              title = '⚠️ Vulnix Scan — Errors';
+              color = 16776960;
+            } 
+            else if (totalCritical > 0) {
+              title = '🚨 Vulnix — Critical Vulnerabilities Found';
+              color = 15548997;
+            } 
+            else if (totalVulns > 0) {
+              title = '🟠 Vulnix — Vulnerabilities Found';
+              color = 15105570;
+            } 
+            else {
+              title = '✅ Vulnix — All Clean';
+              color = 5763719;
+            }
+
+            const [owner, repo] = process.env.GITHUB_REPOSITORY.split('/');
+            const serverUrl = process.env.GITHUB_SERVER_URL;
+            const runUrl = `${serverUrl}/${owner}/${repo}/actions/runs/${context.runId}`;
+            const sha7 = context.sha.substring(0, 7);
+
+            const pad = (v, n) => String(v ?? 0).padStart(n);
+            const rule = '─'.repeat(53);
+
+            const lines = [
+              '**Host Overview:**',
+              '```',
+              'Host             Pkgs  Crit  High  Med   Low   Status',
+              rule,
+            ];
+
+            for (const r of results) {
+              const status = r.status === 'error' ? 'x error'
+                : (r.total_findings || 0) === 0 ? 'v/ clean'
+                : '! vulns';
+              lines.push(
+                `${(r.host || '?').padEnd(16)} ` +
+                `${pad(r.total_findings, 4)}  ${pad(r.critical, 4)}  ` +
+                `${pad(r.high, 4)}  ${pad(r.medium, 4)}  ${pad(r.low, 4)}   ${status}`
+              );
+            }
+
+            lines.push(rule);
+            lines.push(
+              `${'Total'.padEnd(16)} ${pad(totalVulns, 4)}  ${pad(totalCritical, 4)}  ` +
+              `${pad(sum('high'), 4)}  ${pad(sum('medium'), 4)}  ${pad(sum('low'), 4)}`
+            );
+            lines.push('```');
+
+            const vulnHosts = results.filter(r => (r.total_findings || 0) > 0);
+            if (vulnHosts.length > 0) {
+              lines.push('', '**Affected Hosts:**');
+              for (const r of vulnHosts) {
+                const icon = (r.critical || 0) > 0 ? '🔴'
+                  : (r.high || 0) > 0 ? '🟠'
+                  : (r.medium || 0) > 0 ? '🟡'
+                  : '🟢';
+                lines.push(`${icon} \`${r.host}\` — ${r.total_findings} package(s) (${r.critical || 0} critical, ${r.high || 0} high)`);
+              }
+            }
+
+            const cleanHosts = results.filter(r => r.status === 'ok' && (r.total_findings || 0) === 0);
+            if (cleanHosts.length > 0) {
+              lines.push('', '**Clean Hosts:**', cleanHosts.map(r => `✅ \`${r.host}\``).join(', '));
+            }
+
+            const errorHosts = results.filter(r => r.status === 'error');
+            if (errorHosts.length > 0) {
+              lines.push('', '**Errored Hosts:**', errorHosts.map(r => `❌ \`${r.host}\``).join(', '));
+            }
+
+            lines.push('');
+            lines.push(`**Branch:** \`${context.ref.replace('refs/heads/', '')}\``);
+            lines.push(`**Commit:** [\`${sha7}\`](${serverUrl}/${owner}/${repo}/commit/${context.sha})`);
+            lines.push('', `[:link: View Full Report](${runUrl})`);
+
+            let description = lines.join('\n');
+            if (description.length > 4000) {
+              description = description.substring(0, 3900) + `\n\n*...truncated. [See full report](${runUrl})*`;
+            }
+
+            const embed = {
+              title,
+              description,
+              color,
+              timestamp: new Date().toISOString(),
+              footer: { text: `${owner}/${repo}` },
+            };
+
+            const files = ['summary.json', 'summary.md', ...results.map(r => `${r.host}.json`)];
+            const form = new FormData();
+            form.append('payload_json', JSON.stringify({ embeds: [embed] }));
+
+            let i = 0;
+            for (const name of files) {
+              const p = path.join(dir, name);
+              if (fs.existsSync(p)) {
+                form.append(`files[${i++}]`, new Blob([fs.readFileSync(p)]), name);
+              }
+            }
+
+            const resp = await fetch(webhook, { method: 'POST', body: form });
+            if (!resp.ok) {
+              core.setFailed(`Discord webhook failed (${resp.status}): ${await resp.text()}`);
+            }

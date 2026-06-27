@@ -1,0 +1,246 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+      - "feat/**"
+    paths-ignore:
+      - '**.md'
+      - '.gitignore'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  flake-check:
+    name: Flake Check
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    outputs:
+      hosts: ${{ steps.hosts.outputs.json }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup-nix
+        with:
+          ssh-private-key: ${{ secrets.NIX_SECRETS_SSH_KEY }}
+          cachix-name: mxghadimi
+          cachix-auth-token: ${{ secrets.CACHIX_AUTH_TOKEN }}
+
+      - run: nix flake check --show-trace
+
+      - name: Get CI-buildable hosts
+        id: hosts
+        uses: ./.github/actions/get-hosts
+
+  build-check:
+    name: Check - ${{ matrix.linter.name }}
+    needs: [flake-check]
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        linter:
+          - name: formatting
+            cmd: find . -name '*.nix' -print0 | xargs -0 -r nix run nixpkgs#alejandra -- --check
+          - name: statix
+            cmd: nix run nixpkgs#statix -- check . --config .github/statix.toml
+          - name: deadnix
+            cmd: nix run nixpkgs#deadnix -- --fail .
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup-nix
+        with:
+          ssh-private-key: ${{ secrets.NIX_SECRETS_SSH_KEY }}
+          cachix-name: mxghadimi
+          cachix-auth-token: ${{ secrets.CACHIX_AUTH_TOKEN }}
+
+      - name: Run ${{ matrix.linter.name }}
+        run: ${{ matrix.linter.cmd }}
+
+  build-workstations:
+    name: Workstation - ${{ matrix.host }}
+    needs: [flake-check, build-check]
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        host: ${{ fromJSON(needs.flake-check.outputs.hosts) }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/cleanup
+      - uses: ./.github/actions/setup-nix
+        with:
+          ssh-private-key: ${{ secrets.NIX_SECRETS_SSH_KEY }}
+          cachix-name: mxghadimi
+          cachix-auth-token: ${{ secrets.CACHIX_AUTH_TOKEN }}
+
+      - name: Build ${{ matrix.host }}
+        run: |
+          nix build -L --keep-going \
+            .#nixosConfigurations.${{ matrix.host }}.config.system.build.toplevel
+
+  notify:
+    name: Notify
+    needs: [flake-check, build-check, build-workstations]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Build payload and notify
+        uses: actions/github-script@v9
+        env:
+          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
+        with:
+          script: |
+            const [owner, repo] = process.env.GITHUB_REPOSITORY.split('/');
+            const runId = context.runId;
+
+            const jobs = [];
+            for (let page = 1; ; page++) {
+              const resp = await github.rest.actions.listJobsForWorkflowRun({
+                owner, repo, run_id: runId, per_page: 100, page,
+              });
+              jobs.push(...resp.data.jobs);
+              if (jobs.length >= resp.data.total_count) break;
+            }
+
+            const ICON = {
+              success: ':heavy_check_mark:',
+              failure: ':x:',
+              cancelled: ':heavy_multiplication_x:',
+              skipped: ':heavy_minus_sign:',
+              unknown: ':grey_question:',
+            };
+            const LABEL = {
+              success: 'success',
+              failure: 'failed',
+              cancelled: 'cancelled',
+              skipped: 'skipped',
+              unknown: 'unknown',
+            };
+            const icon = c => ICON[c] || ICON.unknown;
+            const label = c => LABEL[c] || LABEL.unknown;
+
+            const worst = list => {
+              if (list.length === 0) return 'skipped';
+              if (list.some(j => j.conclusion === 'failure')) return 'failure';
+              if (list.some(j => j.conclusion === 'cancelled')) return 'cancelled';
+              if (list.every(j => j.conclusion === 'skipped')) return 'skipped';
+              return 'success';
+            };
+
+            const byPrefix = prefix =>
+              jobs.filter(j => j.name.startsWith(prefix)).sort((a, b) => a.name.localeCompare(b.name));
+
+            const duration = job => {
+              if (!job?.started_at || !job?.completed_at) return '';
+              const sec = Math.floor((new Date(job.completed_at) - new Date(job.started_at)) / 1000);
+              return sec < 60 ? `${sec}s` : `${Math.floor(sec / 60)}m ${sec % 60}s`;
+            };
+
+            const flakeCheck = jobs.find(j => j.name === 'Flake Check');
+            const groups = [
+              {
+                label: 'Flake Check',
+                status: flakeCheck?.conclusion || 'skipped',
+                children: [],
+                _job: flakeCheck,
+              },
+              { label: 'Build Checks', prefix: 'Check - ', jobs: byPrefix('Check - ') },
+              { label: 'Workstations', prefix: 'Workstation - ', jobs: byPrefix('Workstation - ') },
+            ];
+
+            for (const g of groups) {
+              if (!g.jobs) continue;
+              g.status = worst(g.jobs);
+              g.children = g.jobs.map(j => ({
+                name: j.name.replace(g.prefix, ''),
+                status: j.conclusion || 'unknown',
+                dur: duration(j),
+              }));
+            }
+
+            const lines = [];
+            for (const g of groups) {
+              const dur = g._job ? duration(g._job) : '';
+              lines.push(`**${g.label}:** ${label(g.status)} ${dur}`);
+              if (g.children.length > 0) {
+                for (const c of g.children) {
+                  lines.push(`\u2003\u2003${icon(c.status)}  ${c.name}  ${c.dur}`);
+                }
+              } 
+              else if (g.jobs?.length === 0) {
+                lines.push('\u2003\u2003:heavy_minus_sign: none ran');
+              }
+              lines.push('');
+            }
+
+            const statuses = groups.map(g => g.status);
+            let title, color;
+            if (statuses.includes('failure')) {
+              title = ':x: CI Failed';
+              color = 15548997;
+            } 
+            else if (statuses.includes('cancelled')) {
+              title = ':heavy_multiplication_x: CI Cancelled';
+              color = 16776960;
+            } 
+            else {
+              title = ':white_check_mark: CI Passed';
+              color = 5763719;
+            }
+
+            const serverUrl = process.env.GITHUB_SERVER_URL;
+            const repoUrl = `${serverUrl}/${owner}/${repo}`;
+            const sha = context.sha.substring(0, 7);
+            const branch = context.ref.replace('refs/heads/', '');
+            const runUrl = `${repoUrl}/actions/runs/${runId}`;
+            const commitTitle = (context.payload.head_commit?.message || '').split('\n')[0];
+
+            const description = [
+              ...lines,
+              `**Branch:** \`${branch}\``,
+              `**Commit:** [\`${sha}\`](${repoUrl}/commit/${context.sha}) ${commitTitle}`,
+              '',
+              `[:link: View Run](${runUrl})`,
+            ].join('\n');
+
+            core.summary
+              .addHeading(title.replace(/:.*?:/g, '').trim(), 2)
+              .addRaw(lines.join('\n'), true)
+              .addLink('View run', runUrl);
+            await core.summary.write();
+
+            const webhook = process.env.DISCORD_WEBHOOK;
+            if (!webhook) {
+              console.log('No DISCORD_WEBHOOK set, skipping');
+              return;
+            }
+
+            const payload = JSON.stringify({
+              embeds: [{
+                title,
+                description,
+                color,
+                timestamp: new Date().toISOString(),
+                footer: { text: `${owner}/${repo}` },
+              }],
+            });
+
+            const resp = await fetch(webhook, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: payload,
+            });
+            if (!resp.ok) {
+              core.setFailed(`Discord webhook failed (${resp.status}): ${await resp.text()}`);
+            }
