@@ -12,7 +12,7 @@
     "acpi_backlight=native"
     "amd_pstate=active"
   ];
-  
+
   environment.systemPackages = [pkgs.brightnessctl];
   services.udev.packages = [pkgs.brightnessctl];
 
