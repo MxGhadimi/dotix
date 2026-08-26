@@ -6,7 +6,6 @@
       "networkmanager"
       "video"
       "audio"
-      "i2c"
     ];
     hashedPasswordFile = config.sops.secrets.userPassword.path;
   };

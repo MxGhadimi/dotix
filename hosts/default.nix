@@ -1,5 +1,6 @@
 {
   imports = [
     ./kage
+    ./hikari
   ];
 }

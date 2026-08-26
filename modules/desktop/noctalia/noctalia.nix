@@ -1,8 +1,21 @@
 {inputs, ...}: {
-  perSystem = {pkgs, ...}: {
-    packages.noctalia = inputs.wrapper-modules.wrappers.noctalia-shell.wrap {
-      inherit pkgs;
-      inherit ((builtins.fromJSON (builtins.readFile ./noctalia.json))) settings;
+  flake.homeModules.noctalia = {
+    pkgs,
+    osConfig,
+    ...
+  }: let
+    raw = builtins.fromJSON (builtins.readFile (./. + "/${osConfig.networking.hostName}.json"));
+    settings = raw.settings or raw;
+  in {
+    home.packages = [
+      (inputs.wrapper-modules.wrappers.noctalia-shell.wrap {
+        inherit pkgs settings;
+      })
+    ];
+
+    xdg.configFile."noctalia/settings.json" = {
+      text = builtins.toJSON settings;
+      force = true;
     };
   };
 }

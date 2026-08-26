@@ -5,7 +5,7 @@
 }: let
   inherit (self) nixosModules homeModules;
 
-  mkKageConfig = {ciBuildable ? false}:
+  mkHikariConfig = {ciBuildable ? false}:
     inputs.nixpkgs.lib.nixosSystem {
       specialArgs = {inherit inputs self;};
       modules = [
@@ -21,12 +21,9 @@
         {custom.refind.theme = "rEFInd-minimal-rog";}
         nixosModules.cachix-agent
 
-        nixosModules.hardware-nvidia
         nixosModules.hardware-audio
         nixosModules.hardware-bluetooth
         nixosModules.hardware-wifi
-
-        nixosModules.llm
 
         nixosModules.niri
         nixosModules.plasma
@@ -36,7 +33,6 @@
         nixosModules.database
         nixosModules.thunar
         nixosModules.throne
-        nixosModules.packettracer
 
         inputs.home-manager.nixosModules.home-manager
         {
@@ -67,7 +63,7 @@
     };
 in {
   flake.nixosConfigurations = {
-    kage = mkKageConfig {};
-    kage-ci = mkKageConfig {ciBuildable = true;};
+    hikari = mkHikariConfig {};
+    hikari-ci = mkHikariConfig {ciBuildable = true;};
   };
 }
