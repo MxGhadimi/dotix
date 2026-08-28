@@ -40,9 +40,8 @@ layout {
     struts
 }
 
-spawn-at-startup "noctalia-shell"
-spawn-at-startup "xwayland-satellite"
 spawn-at-startup "qs" "-c" "noctalia-shell"
+spawn-at-startup "xwayland-satellite"
 
 environment {
     QT_QPA_PLATFORMTHEME "gtk3"

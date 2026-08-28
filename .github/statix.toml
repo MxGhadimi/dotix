@@ -1,0 +1,7 @@
+disabled = [
+  "empty_pattern"
+]
+
+ignore = [
+  "hardware-configuration.nix"
+]

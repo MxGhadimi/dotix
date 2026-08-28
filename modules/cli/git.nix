@@ -1,5 +1,5 @@
 {...}: {
-  flake.homeModules.git = {...}: {
+  flake.homeModules.git = {config, ...}: {
     programs.git = {
       enable = true;
       settings = {
@@ -14,7 +14,7 @@
     programs.ssh.matchBlocks = {
       "github.com" = {
         user = "git";
-        identityFile = "/home/masaroshi/.ssh/github";
+        identityFile = "${config.home.homeDirectory}/.ssh/github";
         identitiesOnly = true;
       };
     };

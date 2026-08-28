@@ -1,7 +1,7 @@
 {...}: {
   flake.homeModules.niri = {
     pkgs,
-    osConfig,
+    hostname,
     ...
   }: {
     home.packages = with pkgs; [
@@ -19,7 +19,9 @@
       QS_ICON_THEME = "Papirus";
     };
 
-    xdg.configFile."niri/config.kdl".source =
-      ./. + "/${osConfig.networking.hostName}.kdl";
+    xdg.configFile."niri/config.kdl" = {
+      source = ./. + "/${hostname}.kdl";
+      force = true;
+    };
   };
 }

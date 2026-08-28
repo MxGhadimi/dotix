@@ -1,10 +1,10 @@
 {inputs, ...}: {
   flake.homeModules.noctalia = {
     pkgs,
-    osConfig,
+    hostname,
     ...
   }: let
-    raw = builtins.fromJSON (builtins.readFile (./. + "/${osConfig.networking.hostName}.json"));
+    raw = builtins.fromJSON (builtins.readFile (./. + "/${hostname}.json"));
     settings = raw.settings or raw;
   in {
     home.packages = [
