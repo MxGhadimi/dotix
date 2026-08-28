@@ -54,8 +54,6 @@
         nixosModules.hardware-bluetooth
         nixosModules.hardware-wifi
 
-        nixosModules.llm
-
         nixosModules.niri
         nixosModules.plasma
         {custom.display.defaultSession = "niri";}
@@ -64,6 +62,7 @@
         nixosModules.database
         nixosModules.thunar
         nixosModules.throne
+        nixosModules.syncthing
         nixosModules.packettracer
 
         inputs.home-manager.nixosModules.home-manager

@@ -7,6 +7,22 @@
   nixpkgs.config.allowUnfree = true;
   system.stateVersion = "26.05";
 
+  boot.supportedFilesystems = ["ntfs"];
+
+  fileSystems."/mnt/windows" = {
+    device = "/dev/disk/by-uuid/24D054AFD0548946";
+    fsType = "ntfs3";
+    options = [
+      "ro"
+      "uid=1000"
+      "gid=100"
+      "umask=022"
+      "nofail"
+      "x-systemd.automount"
+      "x-systemd.idle-timeout=10min"
+    ];
+  };
+
   hardware.graphics = {
     enable = true;
     enable32Bit = true;

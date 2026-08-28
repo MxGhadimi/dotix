@@ -3,3 +3,4 @@ result/
 reports/
 *.backup
 ig_*
+.stfolder/
