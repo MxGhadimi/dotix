@@ -61,6 +61,7 @@
         nixosModules.database
         nixosModules.thunar
         nixosModules.throne
+        nixosModules.syncthing
 
         inputs.home-manager.nixosModules.home-manager
         {

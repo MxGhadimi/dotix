@@ -3,8 +3,6 @@
   nixpkgs.config.allowUnfree = true;
   system.stateVersion = "26.05";
 
-  boot.supportedFilesystems = ["ntfs"];
-
   fileSystems."/data" = {
     device = "/dev/disk/by-uuid/16FC55F1FC55CB9D";
     fsType = "ntfs3";
