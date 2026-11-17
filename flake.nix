@@ -47,6 +47,9 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
+    # umbriel wayland compositor
+    umbriel.url = "github:noctalia-dev/umbriel/cachix";
+
     # Declarative partitioning and formatting
     disko = {
       url = "github:nix-community/disko";

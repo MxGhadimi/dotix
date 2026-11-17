@@ -22,7 +22,10 @@
     homeModules.ghostty
     homeModules.niri
     homeModules.noctalia
+    homeModules.umbriel
     homeModules.vlc
+    homeModules.cozy
+    homeModules.readest
     homeModules.firefox
     homeModules.zen-browser
     homeModules.neovim
@@ -55,6 +58,7 @@
         nixosModules.hardware-wifi
 
         nixosModules.niri
+        nixosModules.umbriel
         nixosModules.plasma
         {custom.display.defaultSession = "niri";}
         nixosModules.polkit-agent

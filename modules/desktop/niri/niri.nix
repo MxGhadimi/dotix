@@ -13,6 +13,7 @@
       aria2
       papirus-icon-theme
       brightnessctl
+      rose-pine-cursor
     ];
 
     home.sessionVariables = {

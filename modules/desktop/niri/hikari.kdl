@@ -1,3 +1,5 @@
+include "/home/masaroshi/.config/niri/noctalia.kdl"
+
 input {
     keyboard {
         xkb {
@@ -40,10 +42,25 @@ layout {
         proportion 0.66667
     }
 
+    tab-indicator {
+        position "bottom"
+        place-within-column
+        hide-when-single-tab
+        width 4
+        gap 8
+        gaps-between-tabs 4
+        length total-proportion=0.6
+        corner-radius 4
+    }
+
+    border {
+        on
+        width 2
+    }
+
     focus-ring {
-        width 1.5
-        active-gradient from="#80c8ff" to="#c7ff7f" angle=45
-        inactive-gradient from="#505050" to="#808080" angle=45 relative-to="workspace-view"
+        on
+        width 1
     }
 
     shadow {
@@ -63,16 +80,15 @@ layout {
     }
 }
 
-spawn-at-startup "noctalia-shell"
+spawn-at-startup "noctalia"
 spawn-at-startup "xwayland-satellite"
-spawn-at-startup "qs" "-c" "noctalia-shell"
-
 
 environment {
     QT_QPA_PLATFORMTHEME "gtk3"
     QS_ICON_THEME "Papirus"
+    XCURSOR_THEME "BreezeX-RosePine-Linux"
+    XCURSOR_SIZE "20"
 }
-
 
 hotkey-overlay {
     skip-at-startup
@@ -82,29 +98,73 @@ prefer-no-csd
 
 screenshot-path "~/Pictures/Screenshots/Screenshot from %Y-%m-%d %H-%M-%S.png"
 
-animations
-
-workspace "1"
-workspace "2"
-workspace "3"
-workspace "4"
-
-window-rule {
-    match app-id=r"zen$"
-    draw-border-with-background false
-    geometry-corner-radius 8
-    clip-to-geometry true
-    open-on-workspace "3"
-    open-maximized true
-    opacity 0.9
+animations {
+    workspace-switch {
+        spring damping-ratio=1.0 stiffness=460 epsilon=0.0001
+    }
+    window-open {
+        duration-ms 280
+        curve "ease-out-expo"
+    }
+    window-close {
+        duration-ms 200
+        curve "ease-out-cubic"
+    }
+    horizontal-view-movement {
+        spring damping-ratio=1.0 stiffness=520 epsilon=0.0001
+    }
+    window-movement {
+        spring damping-ratio=0.95 stiffness=650 epsilon=0.0001
+    }
+    window-resize {
+        spring damping-ratio=1.0 stiffness=650 epsilon=0.0001
+    }
+    overview-open-close {
+        spring damping-ratio=1.0 stiffness=500 epsilon=0.0001
+    }
 }
 
+// 1: Browsing and reading
+workspace "一"
+// 2: Coding and productivity
+workspace "二"
+// 3: Communication
+workspace "三"
+// 4: Media and miscellaneous
+workspace "四"
+// 5: Network tools
+workspace "五"
+
+// Workspace 1
+// Verify app IDs with `niri msg windows`
 window-rule {
-    match app-id="steam_app_1903340"
+    match app-id=r"(?i)zen$"
+    match app-id=r"(?i)^firefox$"
+    match app-id=r"(?i)readest"
+    match app-id=r"(?i)cozy"
+    open-on-workspace "一"
     open-maximized true
     draw-border-with-background false
     geometry-corner-radius 8
     clip-to-geometry true
+}
+
+// Workspace 2
+window-rule {
+    match app-id=r"(?i)^(code|code-oss|obsidian|com\.mitchellh\.ghostty\.nvim)$"
+    open-on-workspace "二"
+}
+
+// Workspace 3
+window-rule {
+    match app-id=r"(?i)^(org\.telegram\.desktop|vesktop)$"
+    open-on-workspace "三"
+}
+
+// Workspace 5
+window-rule {
+    match app-id=r"(?i)^throne$"
+    open-on-workspace "五"
 }
 
 window-rule {
@@ -114,7 +174,7 @@ window-rule {
 }
 
 window-rule {
-    geometry-corner-radius 8
+    geometry-corner-radius 12
     clip-to-geometry true
 }
 
@@ -127,23 +187,24 @@ binds {
     Mod+Shift+Slash { show-hotkey-overlay; }
 
     Mod+Return hotkey-overlay-title="Open a Terminal: ghostty" { spawn "ghostty"; }
-    Mod+D { spawn "noctalia-shell" "ipc" "call" "launcher" "toggle"; }
-    Super+Shift+L { spawn-sh "noctalia-shell ipc call lockScreen lock"; }
+    Mod+N hotkey-overlay-title="Open Neovim" { spawn "ghostty" "--class=com.mitchellh.ghostty.nvim" "-e" "nvim"; }
+    Mod+D { spawn "noctalia" "msg" "panel-toggle" "launcher"; }
+    Super+Shift+L hotkey-overlay-title="Lock the Screen: Noctalia" { spawn "noctalia" "msg" "session" "lock"; }
 
     Mod+Z { spawn "zen"; }
-    Mod+Shift+M { spawn-sh "noctalia-shell ipc call plugin togglePanel MediaMini"; }
-    Mod+S { spawn-sh "noctalia-shell ipc call settings toggle"; }
-    Mod+Shift+Space { spawn-sh "noctalia-shell ipc call controlCenter toggle"; }
+    Mod+Shift+M { spawn "noctalia" "msg" "panel-toggle" "control-center" "media"; }
+    Mod+S { spawn "noctalia" "msg" "settings-toggle"; }
+    Mod+Shift+Space { spawn "noctalia" "msg" "panel-toggle" "control-center"; }
     Mod+Y { spawn-sh "ghostty -e yazi"; }
-    Mod+Shift+B { spawn-sh "ghostty --window-width=100 --window-height=32 -e btop"; }
+    Mod+Shift+B { spawn-sh "ghostty -e btop"; }
 
     XF86AudioRaiseVolume allow-when-locked=true { spawn-sh "wpctl set-volume @DEFAULT_AUDIO_SINK@ 0.05+"; }
     XF86AudioLowerVolume allow-when-locked=true { spawn-sh "wpctl set-volume @DEFAULT_AUDIO_SINK@ 0.05-"; }
     XF86AudioMute allow-when-locked=true { spawn-sh "wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle"; }
     XF86AudioMicMute allow-when-locked=true { spawn-sh "wpctl set-mute @DEFAULT_AUDIO_SOURCE@ toggle"; }
 
-    XF86MonBrightnessUp allow-when-locked=true { spawn-sh "brightnessctl set +5%"; }
-    XF86MonBrightnessDown allow-when-locked=true { spawn-sh "brightnessctl set 5%-"; }
+    XF86MonBrightnessUp allow-when-locked=true { spawn-sh "ddcutil setvcp 10 + 5"; }
+    XF86MonBrightnessDown allow-when-locked=true { spawn-sh "ddcutil setvcp 10 - 5"; }
 
     Mod+O repeat=false { toggle-overview; }
 
@@ -177,7 +238,6 @@ binds {
     Mod+Ctrl+Shift+U         { move-column-to-workspace-down; }
     Mod+Ctrl+Shift+I         { move-column-to-workspace-up; }
 
-    // Workspace movement
     Mod+Shift+Page_Down { move-workspace-down; }
     Mod+Shift+Page_Up   { move-workspace-up; }
     Mod+Shift+U         { move-workspace-down; }
@@ -218,52 +278,38 @@ binds {
     Mod+Shift+8 { move-column-to-workspace 8; }
     Mod+Shift+9 { move-column-to-workspace 9; }
 
-    // Switches focus between the current and the previous workspace.
     Mod+Tab { focus-workspace-previous; }
 
-    // The following binds move the focused window in and out of a column.
-    // If the window is alone, they will consume it into the nearby column to the side.
-    // If the window is already in a column, they will expel it out.
     Mod+BracketLeft  { consume-or-expel-window-left; }
     Mod+BracketRight { consume-or-expel-window-right; }
 
-    // Consume one window from the right to the bottom of the focused column.
     Mod+Comma { consume-window-into-column; }
-    // Expel the bottom window from the focused column to the right.
     Mod+Period { expel-window-from-column; }
 
     Mod+R { switch-preset-column-width; }
 
-    // SPLIT duplicate Mod+Shift+R into Shift vs Ctrl
     Mod+Shift+R { switch-preset-window-height; }
     Mod+Ctrl+R  { reset-window-height; }
 
     Mod+F { maximize-column; }
+    Mod+M repeat=false { maximize-window-to-edges; }
 
-    // SPLIT duplicate Mod+Shift+F into Shift vs Ctrl
     Mod+Shift+F { fullscreen-window; }
     Mod+Ctrl+F  { expand-column-to-available-width; }
 
     Mod+C { center-column; }
 
-    // Center all fully visible columns on screen.
     Mod+Shift+C { center-visible-columns; }
 
-    // Finer width adjustments.
     Mod+Minus { set-column-width "-10%"; }
     Mod+Equal { set-column-width "+10%"; }
 
-    // Finer height adjustments when in column with other windows.
     Mod+Shift+Minus { set-window-height "-10%"; }
     Mod+Shift+Equal { set-window-height "+10%"; }
 
-    // Move the focused window between the floating and the tiling layout.
     Mod+V       { toggle-window-floating; }
     Mod+Shift+V { switch-focus-between-floating-and-tiling; }
 
-    // Toggle tabbed column display mode.
-    // Windows in this column will appear as vertical tabs,
-    // rather than stacked on top of each other.
     Mod+W { toggle-column-tabbed-display; }
 
     Mod+Shift+S { screenshot; }
@@ -272,12 +318,8 @@ binds {
 
     Mod+Escape allow-inhibiting=false { toggle-keyboard-shortcuts-inhibit; }
 
-    // The quit action will show a confirmation dialog to avoid accidental exits.
     Mod+Shift+E { quit; }
-    Shift+Alt+Delete { quit; }
 
-    // Powers off the monitors. To turn them back on, do any input like
-    // moving the mouse or pressing any other key.
     Mod+Shift+P { power-off-monitors; }
 }
 
@@ -289,8 +331,11 @@ cursor {
 }
 
 layer-rule {
-    match namespace="^noctalia-overview*"
-    place-within-backdrop true
+    match namespace="^noctalia-attached-panel$"
+    background-effect {
+        blur false
+        xray false
+    }
 }
 
 overview {
@@ -305,7 +350,6 @@ gestures {
     }
 }
 
-// Global blur settings
 blur {
     passes 3
     offset 3.0
@@ -313,7 +357,6 @@ blur {
     saturation 1.2
 }
 
-// Blur for normal windows
 window-rule {
     background-effect {
         blur true
@@ -321,7 +364,6 @@ window-rule {
     }
 }
 
-// Internal 14" 1920x1200. Confirm name with `niri msg outputs`.
 output "eDP-1" {
     mode "1920x1200@60.003"
     scale 1.25

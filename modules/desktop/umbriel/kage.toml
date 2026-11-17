@@ -1,0 +1,341 @@
+[include.optional]
+files = ["noctalia.toml"]
+
+[general]
+autostart = ["noctalia"]
+mod_key = "Super"
+xwayland = true
+show_cheatsheet = false
+nvidia_sync_workaround = true
+
+[environment]
+QT_QPA_PLATFORMTHEME = "qt6ct"
+QS_ICON_THEME = "Papirus"
+XCURSOR_THEME = "BreezeX-RosePine-Linux"
+XCURSOR_SIZE = "20"
+
+[output.HDMI-A-1]
+mode = "2560x1440@144.004"
+position = [0, 0]
+scale = 1.0
+workspaces = ["一", "二", "三", "四", "五"]
+
+[appearance]
+prefer_no_csd = true
+border_width = 2
+outer_border_width = 1
+corner_radius = 8
+opaque_fullscreen = true
+
+[appearance.blur]
+enabled = true
+optimized = true
+passes = 3
+radius = 3
+noise = 0.02
+saturation = 1.2
+
+[appearance.shadow]
+enabled = true
+softness = 16
+offset_x = 0
+offset_y = 3
+
+[appearance.tab_bar]
+style = "indicator"
+position = "bottom"
+height = 4
+gap = 8
+tab_gap = 4
+corner_radius = 4
+visible = true
+hide_when_single = true
+max_tabs = 0
+overflow = "shrink"
+
+[animation]
+enabled = true
+duration_ms = 250
+curve = "easeout"
+
+[animation.workspaces]
+style = "slide"
+enabled = true
+curve = "spring:1,460"
+
+[animation.windows_in]
+enabled = true
+style = "fade"
+duration_ms = 280
+curve = "0.16,1,0.3,1"
+
+[animation.windows_out]
+enabled = true
+style = "fade"
+duration_ms = 200
+curve = "0.33,1,0.68,1"
+
+[animation.windows_move]
+enabled = true
+curve = "spring:1,520"
+
+[animation.windows_resize]
+enabled = true
+curve = "spring:1,650"
+
+[animation.windows_opacity]
+enabled = true
+duration_ms = 200
+curve = "easeout"
+
+[animation.border]
+enabled = true
+curve = "spring:1,650"
+
+[animation.overview]
+enabled = true
+curve = "spring:1,500"
+workspace_curve = "spring:1,520"
+
+[animation.dialogs]
+enabled = true
+dim = 0.16
+duration_ms = 160
+curve = "easeout"
+
+[animation.windows_drag]
+physics = false
+
+[colors]
+shadow = "#0000007F"
+
+[input.keyboard]
+layout = "us,ir"
+options = "grp:win_space_toggle"
+[input.cursor]
+theme = "BreezeX-RosePine-Linux"
+follows_focus = true
+hide_when_typing = true
+hide_timeout_ms = 10000
+size = 20
+[input.mouse]
+scroll_button = "MouseLeft"
+scroll_button_lock = false
+
+[input.focus]
+follows_mouse = true
+follows_mouse_max_scroll = 0.0
+hover_raises = false
+
+[layout]
+mode = "scrolling"
+extent_presets = [0.33333, 0.5, 0.66667]
+client_maximize = "column"
+gap = 5
+
+[layout.scrolling]
+default_extent_fraction = 0.5
+center_underfull_strip = false
+center_focused = "never"
+center_on_overview_select = false
+
+[layout.struts]
+top = 1
+right = 1
+bottom = 1
+left = 1
+
+[keybinds]
+"Mod+MouseMiddle" = "layout-scroll-drag"
+"Mod+Left" = "window-focus-left"
+"Mod+Down" = "window-focus-down"
+"Mod+Up" = "window-focus-up"
+"Mod+Right" = "window-focus-right"
+"Mod+H" = "window-focus-left"
+"Mod+J" = "window-focus-down"
+"Mod+K" = "window-focus-up"
+"Mod+L" = "window-focus-right"
+"Mod+Ctrl+Left" = "column-move-left"
+"Mod+Ctrl+Down" = "window-move-down"
+"Mod+Ctrl+Up" = "window-move-up"
+"Mod+Ctrl+Right" = "column-move-right"
+"Mod+Ctrl+H" = "column-move-left"
+"Mod+Ctrl+J" = "window-move-down"
+"Mod+Ctrl+K" = "window-move-up"
+"Mod+Ctrl+L" = "column-move-right"
+"Mod+Home" = "column-focus-first"
+"Mod+End" = "column-focus-last"
+"Mod+Shift+Home" = "column-move-to-first"
+"Mod+Shift+End" = "column-move-to-last"
+"Mod+Ctrl+Shift+Page_Down" = "column-move-to-workspace-next"
+"Mod+Ctrl+Shift+Page_Up" = "column-move-to-workspace-previous"
+"Mod+Ctrl+Shift+U" = "column-move-to-workspace-next"
+"Mod+Ctrl+Shift+I" = "column-move-to-workspace-previous"
+"Mod+Shift+Page_Down" = "workspace-move-down"
+"Mod+Shift+Page_Up" = "workspace-move-up"
+"Mod+Shift+U" = "workspace-move-down"
+"Mod+Shift+I" = "workspace-move-up"
+"Mod+Page_Down" = "workspace-next"
+"Mod+Page_Up" = "workspace-previous"
+"Mod+U" = "workspace-next"
+"Mod+I" = "workspace-previous"
+"Mod+WheelRight" = "window-focus-right"
+"Mod+WheelLeft" = "window-focus-left"
+"Mod+Shift+WheelRight" = "column-move-right"
+"Mod+Shift+WheelLeft" = "column-move-left"
+"Mod+1" = "workspace-switch 1"
+"Mod+2" = "workspace-switch 2"
+"Mod+3" = "workspace-switch 3"
+"Mod+4" = "workspace-switch 4"
+"Mod+5" = "workspace-switch 5"
+"Mod+6" = "workspace-switch 6"
+"Mod+7" = "workspace-switch 7"
+"Mod+8" = "workspace-switch 8"
+"Mod+9" = "workspace-switch 9"
+"Mod+Shift+1" = "column-move-to-workspace 1"
+"Mod+Shift+2" = "column-move-to-workspace 2"
+"Mod+Shift+3" = "column-move-to-workspace 3"
+"Mod+Shift+4" = "column-move-to-workspace 4"
+"Mod+Shift+5" = "column-move-to-workspace 5"
+"Mod+Shift+6" = "column-move-to-workspace 6"
+"Mod+Shift+7" = "column-move-to-workspace 7"
+"Mod+Shift+8" = "column-move-to-workspace 8"
+"Mod+Shift+9" = "column-move-to-workspace 9"
+"Mod+Tab" = "workspace-focus-last"
+"Mod+BracketLeft" = "window-consume-or-expel-left"
+"Mod+BracketRight" = "window-consume-or-expel-right"
+"Mod+Comma" = "window-consume-from-right"
+"Mod+R" = "window-cycle-primary-extent"
+"Mod+Shift+R" = "window-cycle-secondary-extent"
+"Mod+C" = "column-center"
+"Mod+Minus" = "window-modify-primary-extent -0.1"
+"Mod+Equal" = "window-modify-primary-extent +0.1"
+"Mod+Shift+Minus" = "window-modify-secondary-extent -0.1"
+"Mod+Shift+Equal" = "window-modify-secondary-extent +0.1"
+"Mod+Shift+P" = "dpms-off"
+"Mod+Shift+Slash" = { action = "cheatsheet-toggle", repeat = false }
+"Mod+Return" = { action = "spawn ghostty", repeat = false }
+"Mod+N" = { action = "spawn ghostty --class=com.mitchellh.ghostty.nvim -e nvim", repeat = false }
+"Mod+D" = { action = "spawn noctalia msg panel-toggle launcher", repeat = false }
+"Mod+Shift+L" = { action = "spawn noctalia msg session lock", repeat = false }
+"Mod+Z" = { action = "spawn zen", repeat = false }
+"Mod+Shift+M" = { action = "spawn noctalia msg panel-toggle control-center media", repeat = false }
+"Mod+S" = { action = "spawn noctalia msg settings-toggle", repeat = false }
+"Mod+Shift+Space" = { action = "spawn noctalia msg panel-toggle control-center", repeat = false }
+"Mod+Y" = { action = "spawn ghostty -e yazi", repeat = false }
+"Mod+Shift+B" = { action = "spawn ghostty -e btop", repeat = false }
+XF86AudioRaiseVolume = { action = "spawn wpctl set-volume @DEFAULT_AUDIO_SINK@ 0.05+", allow_when_locked = true }
+XF86AudioLowerVolume = { action = "spawn wpctl set-volume @DEFAULT_AUDIO_SINK@ 0.05-", allow_when_locked = true }
+XF86AudioMute = { action = "spawn wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle", allow_when_locked = true, repeat = false }
+XF86AudioMicMute = { action = "spawn wpctl set-mute @DEFAULT_AUDIO_SOURCE@ toggle", allow_when_locked = true, repeat = false }
+XF86MonBrightnessUp = { action = "spawn ddcutil setvcp 10 + 5", allow_when_locked = true }
+XF86MonBrightnessDown = { action = "spawn ddcutil setvcp 10 - 5", allow_when_locked = true }
+"Mod+WheelDown" = { action = "workspace-next", cooldown_ms = 150 }
+"Mod+WheelUp" = { action = "workspace-previous", cooldown_ms = 150 }
+"Mod+Shift+WheelDown" = { action = "column-move-to-workspace-next", cooldown_ms = 150 }
+"Mod+Shift+WheelUp" = { action = "column-move-to-workspace-previous", cooldown_ms = 150 }
+"Mod+F" = { action = "window-toggle-maximize", repeat = false }
+"Mod+Shift+F" = { action = "window-toggle-fullscreen", repeat = false }
+"Mod+M" = { action = "window-toggle-maximize-to-edges", repeat = false }
+"Mod+V" = { action = "window-toggle-floating", repeat = false }
+"Mod+Shift+V" = { action = "window-focus-switch-floating", repeat = false }
+"Mod+W" = { action = "column-toggle-tabbed", repeat = false }
+"Mod+O" = { action = "overview-toggle", repeat = false }
+"Mod+Q" = { action = "window-close", repeat = false }
+"Mod+Shift+S" = { action = "spawn noctalia msg screenshot-region --directory ~/Pictures/Screenshots --filename-pattern 'Screenshot from %Y-%m-%d %H-%M-%S'", repeat = false }
+"Shift+Print" = { action = "spawn noctalia msg screenshot-fullscreen --directory ~/Pictures/Screenshots --filename-pattern 'Screenshot from %Y-%m-%d %H-%M-%S'", repeat = false }
+"Alt+Print" = { action = "spawn noctalia msg screenshot-window --directory ~/Pictures/Screenshots --filename-pattern 'Screenshot from %Y-%m-%d %H-%M-%S'", repeat = false }
+"Mod+Escape" = { action = "shortcuts-inhibit-toggle", allow_when_inhibited = true, repeat = false }
+"Mod+Shift+E" = { action = "session-quit", repeat = false }
+"Shift+Alt+Delete" = { action = "session-quit", repeat = false }
+
+[hot_corners.top_left]
+enabled = false
+[hot_corners.top_right]
+enabled = false
+[hot_corners.bottom_left]
+enabled = false
+[hot_corners.bottom_right]
+enabled = false
+
+[[window_rule]]
+blur = true
+
+[[window_rule]]
+match = { app_id = "^dev[.]noctalia[.]Noctalia$" }
+default_floating = true
+default_floating_size_px = { width = 1020, height = 900 }
+
+[[window_rule]]
+match = { app_id = "^dev[.]noctalia[.]UmbrielSharePicker$" }
+default_floating = true
+default_floating_size_px = { width = 800, height = 600 }
+
+[[window_rule]]
+match = { app_id = "(?i)(zen$|^firefox$|readest|cozy)" }
+default_workspace = "一"
+default_maximize = true
+
+[[window_rule]]
+match = { app_id = '(?i)^(code|code-oss|obsidian|com\.mitchellh\.ghostty\.nvim)$' }
+default_workspace = "二"
+
+[[window_rule]]
+match = { app_id = '(?i)^(org\.telegram\.desktop|vesktop)$' }
+default_workspace = "三"
+
+[[window_rule]]
+match = { app_id = "(?i)^throne$" }
+default_workspace = "五"
+
+[[window_rule]]
+match = { app_id = "zen$" }
+opacity = 0.9
+corner_radius = 8
+
+[[window_rule]]
+match = { app_id = "^steam_app_1903340$" }
+default_maximize = true
+corner_radius = 8
+
+[[window_rule]]
+match = { app_id = "^com[.]mitchellh[.]ghostty$" }
+opacity = 0.85
+
+[[window_rule]]
+match = { app_id = "^org[.]telegram[.]desktop$", title = "^Media viewer$" }
+default_floating = true
+
+[[layer_rule]]
+match = { namespace = "^noctalia-(bar-[^\"]+|notification|dock|panel|attached-panel|osd|desktop-widget-[^\"]*)$" }
+blur = true
+blur_ignore_alpha = 0.5
+blur_popups = true
+
+[[layer_rule]]
+match = { namespace = "^noctalia-(notification|dock|panel|attached-panel|osd)$" }
+blur_optimized = false
+
+[[layer_rule]]
+match = { namespace = "^noctalia-attached-panel$" }
+blur = false
+
+[[workspace]]
+name = "一"
+output = "HDMI-A-1"
+
+[[workspace]]
+name = "二"
+output = "HDMI-A-1"
+
+[[workspace]]
+name = "三"
+output = "HDMI-A-1"
+
+[[workspace]]
+name = "四"
+output = "HDMI-A-1"
+
+[[workspace]]
+name = "五"
+output = "HDMI-A-1"
