@@ -158,7 +158,7 @@ jobs:
 
             if (introduced.length === 0 && resolved.length === 0) {
               lines.push('No change in known CVEs from this update.');
-            } 
+            }
             else {
               if (introduced.length > 0) {
                 lines.push('This update **adds** the following CVEs:', '');
@@ -178,7 +178,7 @@ jobs:
 
             if (existing) {
               await github.rest.issues.updateComment({ owner, repo, comment_id: existing.id, body });
-            } 
+            }
             else {
               await github.rest.issues.createComment({ owner, repo, issue_number: prNumber, body });
             }
@@ -223,43 +223,41 @@ jobs:
             }
 
             const searchStart = new Date();
-            let run = null;
+            const isCancelled = r => r.status === 'completed' && r.conclusion === 'cancelled';
 
-            for (let attempt = 1; attempt <= 60 && !run; attempt++) {
-              await sleep(15000);
-
-              const exact = await github.rest.actions.listWorkflowRuns({
-                owner, repo, workflow_id: ci.id, head_sha: commitSha, per_page: 1,
-              });
-              if (exact.data.workflow_runs.length > 0) {
-                const r = exact.data.workflow_runs[0];
-                if (r.status === 'completed' && r.conclusion === 'cancelled') {
-                } 
-                else if (r.status === 'completed') {
-                  run = r;
-                  break;
-                } 
-                else {
-                  continue;
-                }
-              }
-
+            const findSupersedingRun = async (excludeRunId, since) => {
               const recent = await github.rest.actions.listWorkflowRuns({
                 owner, repo, workflow_id: ci.id, branch, per_page: 5,
               });
+              return recent.data.workflow_runs.find(r =>
+                r.id !== excludeRunId &&
+                !isCancelled(r) &&
+                (r.head_sha === commitSha || new Date(r.created_at) >= since)
+              ) || null;
+            };
 
-              const candidate = recent.data.workflow_runs[0];
-              if (!candidate) continue;
+            // Phase 1: wait up to 15 minutes for CI to appear (accept queued/in_progress/completed)
+            let run = null;
+            for (let attempt = 1; attempt <= 60 && !run; attempt++) {
+              if (attempt > 1) await sleep(15000);
 
-              if (candidate.head_sha === commitSha) {
-                if (candidate.status === 'completed') { run = candidate; break; }
-              } 
-              else if (new Date(candidate.created_at) >= searchStart) {
-                if (candidate.status === 'completed') {
-                  console.log(`Accepting superseding run #${candidate.id}`);
-                  run = candidate;
-                  break;
-                }
+              const exact = await github.rest.actions.listWorkflowRuns({
+                owner, repo, workflow_id: ci.id, head_sha: commitSha, per_page: 5,
+              });
+              const exactRun = exact.data.workflow_runs.find(r => !isCancelled(r));
+              if (exactRun) {
+                run = exactRun;
+                console.log(`Found CI run #${run.id} (status=${run.status}) for ${commitSha.substring(0, 7)}`);
+                break;
+              }
+
+              const cancelledExact = exact.data.workflow_runs[0];
+              const since = cancelledExact ? new Date(cancelledExact.created_at) : searchStart;
+              const superseding = await findSupersedingRun(cancelledExact?.id ?? null, since);
+              if (superseding) {
+                run = superseding;
+                console.log(`Accepting superseding run #${run.id} (sha=${run.head_sha.substring(0, 7)}, status=${run.status})`);
+                break;
               }
             }
 
@@ -268,10 +266,27 @@ jobs:
               return;
             }
 
-            for (let attempt = 1; attempt <= 120 && run.status !== 'completed'; attempt++) {
-              await sleep(15000);
+            // Phase 2: wait up to 130 minutes for CI (or a superseding run if cancelled) to finish
+            const deadline = Date.now() + 130 * 60 * 1000;
+            let poll = 0;
+            while (Date.now() < deadline) {
+              if (run.status === 'completed') {
+                if (run.conclusion === 'cancelled') {
+                  await sleep(15000);
+                  const next = await findSupersedingRun(run.id, new Date(run.created_at));
+                  if (next) {
+                    console.log(`Run #${run.id} was cancelled; switching to superseding run #${next.id}`);
+                    run = next;
+                    continue;
+                  }
+                }
+                break;
+              }
+
+              await sleep(30000);
+              poll++;
               run = (await github.rest.actions.getWorkflowRun({ owner, repo, run_id: run.id })).data;
-              console.log(`Poll ${attempt}: status=${run.status} conclusion=${run.conclusion}`);
+              console.log(`Poll ${poll} (run #${run.id}): status=${run.status} conclusion=${run.conclusion}`);
             }
 
             if (run.status !== 'completed') {
@@ -338,7 +353,7 @@ jobs:
               color = 15548997;
               lines = ['**Status:** update job failed', '', `[:link: View Run](${updateRunUrl})`];
 
-            } 
+            }
             else if (!updated) {
               title = ':white_check_mark: Flake Inputs Up to Date';
               color = 5763719;
@@ -352,7 +367,7 @@ jobs:
                 `[:link: View Run](${updateRunUrl})`,
               ];
 
-            } 
+            }
             else if (ciConclusion === 'success') {
               title = ':white_check_mark: Flake Update + CI Passed';
               color = 5763719;
@@ -367,7 +382,7 @@ jobs:
                 `[:link: CI Run](${ciRunUrl})`,
               ].filter(Boolean);
 
-            } 
+            }
             else if (ciConclusion === 'failure') {
               title = ':x: Flake Update — CI Failed';
               color = 15548997;
@@ -382,7 +397,7 @@ jobs:
                 `[:link: CI Run](${ciRunUrl})`,
               ].filter(Boolean);
 
-            } 
+            }
             else if (ciConclusion === 'cancelled') {
               title = ':heavy_multiplication_x: Flake Update — CI Cancelled';
               color = 16776960;
@@ -397,7 +412,7 @@ jobs:
                 `[:link: CI Run](${ciRunUrl})`,
               ].filter(Boolean);
 
-            } 
+            }
             else {
               title = ':warning: Flake Updated — CI Status Unknown';
               color = 16776960;

@@ -66,6 +66,8 @@
         nixosModules.thunar
         nixosModules.throne
         nixosModules.syncthing
+
+        nixosModules.samba
         nixosModules.packettracer
 
         inputs.home-manager.nixosModules.home-manager
